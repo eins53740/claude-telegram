@@ -79,12 +79,15 @@ async def handle_message(update: Update, context) -> None:
     try:
         cmd = ["claude", "-p", prompt]
         log.info("EXEC %s  cwd=%s  timeout=%ss", cmd[:2], DEFAULT_CWD, TIMEOUT_SECONDS)
+        # Remove CLAUDECODE env var to avoid nested-session detection
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=TIMEOUT_SECONDS,
             cwd=DEFAULT_CWD,
+            env=env,
         )
         log.info("DONE rc=%s  stdout=%d chars  stderr=%d chars",
                  result.returncode, len(result.stdout), len(result.stderr))
