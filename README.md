@@ -119,39 +119,36 @@ Send /ping from Telegram to verify.
 
 ## Running in Background
 
-### Option A: No console window
+| Method | File | Console | Auto-Start | How to Stop |
+|--------|------|---------|------------|-------------|
+| **Visible console** | `start_telegram_bot.bat` | Yes | No | Ctrl+C or close window |
+| **Hidden (manual)** | `start_hidden.vbs` | No | No | `taskkill /IM pythonw.exe /F` |
+| **Hidden + auto-start** | `start_hidden.vbs` in Startup folder | No | Yes | `taskkill /IM pythonw.exe /F` |
 
-```powershell
-pythonw claude_telegram_bot.py
+### Quick Setup (recommended — no admin needed)
+
+Copy the VBS launcher to the Windows Startup folder so the bot starts hidden on every logon:
+
+```bash
+# 1. Install auto-start
+copy start_hidden.vbs "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\ClaudeTelegramBot.vbs"
+
+# 2. Start it now (or double-click start_hidden.vbs)
+cscript //nologo start_hidden.vbs
+
+# 3. Verify it's running
+tasklist | findstr pythonw
+
+# Stop the bot
+taskkill /IM pythonw.exe /F
+
+# Remove auto-start
+del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\ClaudeTelegramBot.vbs"
 ```
 
-Logs still go to `claude_telegram_bot.log` — you just don't see the console.
+### Scheduled Task (alternative — requires admin)
 
-### Option B: Windows Startup (auto-start on login)
-
-The repo includes `startup_telegram_bot.bat`. To auto-start on login:
-
-1. Press `Win+R`, type `shell:startup`, press Enter
-2. Create a shortcut to `startup_telegram_bot.bat` in the opened folder
-
-Or via PowerShell:
-```powershell
-$WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Claude Telegram Bot.lnk")
-$Shortcut.TargetPath = "C:\Github\BD\Agents\claude-telegram\startup_telegram_bot.bat"
-$Shortcut.WorkingDirectory = "C:\Github\BD\Agents\claude-telegram"
-$Shortcut.Save()
-```
-
-### Option C: Windows Task Scheduler (restart on failure)
-
-1. Open Task Scheduler > Create Basic Task
-2. Trigger: "When I log on"
-3. Action: Start a program
-   - Program: `pythonw`
-   - Arguments: `C:\Github\BD\Agents\claude-telegram\claude_telegram_bot.py`
-   - Start in: `C:\Github\BD\Agents\claude-telegram`
-4. In Settings tab: enable "Restart the task if it fails" (1 minute interval, 3 retries)
+`install_scheduled_task.bat` creates a Windows Task Scheduler entry that runs at logon. Requires elevated privileges. Use the Startup folder method above if you don't have admin access.
 
 ## Logging
 
@@ -309,8 +306,10 @@ claude-telegram/
 ├── README.md               # This file
 ├── claude_telegram_bot.py  # Bot script (~130 lines)
 ├── requirements.txt        # pip dependencies
-├── start_telegram_bot.bat  # Manual launcher
-└── startup_telegram_bot.bat # Windows Startup launcher
+├── start_telegram_bot.bat       # Manual launcher (visible console)
+├── start_hidden.vbs             # Hidden launcher (no console window)
+├── install_scheduled_task.bat   # Task Scheduler installer/uninstaller
+└── startup_telegram_bot.bat     # Windows Startup launcher (visible)
 ```
 
 ## License

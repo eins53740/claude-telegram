@@ -12,14 +12,45 @@ Telegram bot that controls the Claude Code CLI from a phone. A local Python scri
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the bot
+# Run the bot (visible console)
 python claude_telegram_bot.py
 
-# Run in background (no console window, Windows)
+# Run hidden (no console window)
 pythonw claude_telegram_bot.py
 ```
 
 No tests or linter configured.
+
+## Background / Persistent Running
+
+| Method | File | Console | Auto-Start | How to Stop |
+|--------|------|---------|------------|-------------|
+| **Visible console** | `start_telegram_bot.bat` | Yes | No | Ctrl+C or close window |
+| **Hidden (manual)** | `start_hidden.vbs` | No | No | `taskkill /IM pythonw.exe /F` |
+| **Hidden + auto-start** | `start_hidden.vbs` in Startup folder | No | Yes | `taskkill /IM pythonw.exe /F` |
+
+### Quick Setup (recommended — no admin needed)
+
+```bash
+# 1. Copy the VBS launcher to the Windows Startup folder
+copy start_hidden.vbs "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\ClaudeTelegramBot.vbs"
+
+# 2. Start it now (double-click start_hidden.vbs, or run:)
+cscript //nologo start_hidden.vbs
+
+# 3. Verify it's running
+tasklist | findstr pythonw
+
+# Stop the bot
+taskkill /IM pythonw.exe /F
+
+# Remove auto-start
+del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\ClaudeTelegramBot.vbs"
+```
+
+### Scheduled Task (alternative — requires admin)
+
+`install_scheduled_task.bat` creates a Task Scheduler entry. Requires elevated privileges.
 
 ## Architecture
 
