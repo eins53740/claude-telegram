@@ -7,7 +7,7 @@ REM This runs the bot with a visible console window showing logs.
 REM Close the window or press Ctrl+C to stop.
 
 title Claude Telegram Bot
-cd /d "C:\BD_Obsidian\WORKING_FOLDER\claude-telegram"
+cd /d "C:\Github\BD\Agents\claude-telegram"
 
 echo Bot starting at %date% %time%
 echo Log file: %cd%\claude_telegram_bot.log
