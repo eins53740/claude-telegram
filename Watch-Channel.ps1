@@ -36,6 +36,17 @@ $manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
 $bot = $manifest.bots | Where-Object { $_.name -eq $Name }
 if (-not $bot) { throw "Bot '$Name' not found in $ManifestPath" }
 
+# Single-instance guard: if another supervisor for THIS bot is already alive,
+# exit. Prevents duplicate supervisors (two pollers -> 409) when start-all, the
+# logon task, and the monitor's auto-heal race to start the same bot.
+$peer = Get-CimInstance Win32_Process -Filter "Name='pwsh.exe' OR Name='powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -match "Watch-Channel\.ps1.*-Name\s+'?$([regex]::Escape($Name))\b" }
+if ($peer) {
+    Write-Host "A supervisor for '$Name' is already running (pid $($peer.ProcessId -join ',')). Exiting to avoid a duplicate poller." -ForegroundColor Yellow
+    Start-Sleep 4
+    return
+}
+
 $title = if ($bot.tabTitle) { $bot.tabTitle } else { "tg:$Name" }
 $Host.UI.RawUI.WindowTitle = $title
 # Windows Terminal: set the tab title via the OSC 9;9 / OSC 0 escape too.

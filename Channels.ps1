@@ -222,15 +222,21 @@ switch ($Action) {
     }
 
     'start-all' {
-        $frag = $bots | ForEach-Object { Get-TabFragment $_ }
-        $cmd = $frag -join ' ; '
-        Write-Host "Opening Windows Terminal with $($bots.Count) titled tabs..." -ForegroundColor Cyan
+        # Skip bots that already have a live supervisor (don't duplicate).
+        $todo = @($bots | Where-Object { -not (Test-SupervisorRunning $_.name) })
+        $skip = @($bots | Where-Object { Test-SupervisorRunning $_.name })
+        if ($skip) { Write-Host "already running (skipped): $($skip.name -join ', ')" -ForegroundColor DarkGray }
+        if (-not $todo) { Write-Host "All bots already running." -ForegroundColor Green; break }
+        # -w 0 attaches to the existing fleet window, or creates it if none.
+        $cmd = '-w 0 ' + (($todo | ForEach-Object { Get-TabFragment $_ }) -join ' ; ')
+        Write-Host "Opening tab(s): $($todo.name -join ', ')" -ForegroundColor Cyan
         Start-Process wt -ArgumentList $cmd
     }
 
     'start' {
         if (-not $Name) { throw "start needs -Name" }
         $b = Get-Bot $Name
+        if (Test-SupervisorRunning $Name) { Write-Host "$Name already has a running supervisor; not starting a duplicate." -ForegroundColor DarkGray; break }
         # -w 0 attaches the tab to the existing fleet window instead of opening a new one.
         Start-Process wt -ArgumentList ('-w 0 ' + (Get-TabFragment $b))
     }
