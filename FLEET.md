@@ -61,6 +61,43 @@ Default `pairing` captures unknown numeric IDs; switch to `allowlist` once your
 IDs are in (drops strangers silently). A Telegram numeric ID identifies an
 **account**, not a device. Capture one via `@userinfobot`, then `allow`.
 
+## Tuning persona & permissions
+
+Each bot has two knobs: **persona** (what it should do) and **permissions** (what
+it's *allowed* to do unattended — a bot can't answer a permission prompt, so a
+tool works only if it's on the allow list).
+
+**Persona** — `<profileDir>\SYSTEM_PROMPT.md`. Edit, then `.\Channels.ps1 restart -Name <bot>`.
+
+**Permissions — two layers (merged):**
+1. `~/.claude/settings.json` — global baseline for **all** bots (`defaultMode: auto`). Today: Telegram reply/react, Canary read, personal GitHub read, GHE read.
+2. `<repoRoot>\.claude\settings.local.json` — per-bot (machine-local, uncommitted). Adds `allow` / `deny` for just that bot. `deny` overrides `allow`.
+
+Current per-bot extras (via each `repoRoot`'s settings.local.json):
+
+| Bot | repoRoot | Extra (read) | Denied |
+|-----|----------|--------------|--------|
+| uns-ot-expert | `…\CodingAgentIgnition` | EMQX, Ignition ×3, SSH | EMQX `publish_message`, SSH `run_command` |
+| bd-claude-vmhost1 | `D:\Github\BD` | EMQX, Ignition ×3, SSH, Gmail/Calendar | + Gmail `send`/`draft` |
+| generic-channel | its profile dir | none (baseline only) | — |
+
+How to change later:
+
+```powershell
+# give ONE bot a tool: add to "allow" in <repoRoot>\.claude\settings.local.json
+#   a whole server:  "mcp__emqx-mcp"
+#   one tool:        "mcp__ssh-uns-mcp__get_system_info"
+# block a tool:      add to "deny" (wins over allow)
+# all bots:          edit ~/.claude/settings.json
+# then:
+.\Channels.ps1 restart -Name <bot>
+```
+
+**Pending / available:** uns-ot-expert Jira/Confluence is blocked until the local
+`atlassian-secil` MCP is configured (not installed yet) — then add its read tools
+to that repo's settings.local.json. MS365 can be added to bd-vmhost1 the same way
+(read tools only; deny send/draft).
+
 ## Add a bot
 
 1. `@BotFather` → new bot → token.
