@@ -82,6 +82,13 @@ function Test-PidAlive([int]$processId) {
     return [bool](Get-Process -Id $processId -ErrorAction SilentlyContinue)
 }
 
+function Test-SupervisorRunning([string]$n) {
+    # Is a Watch-Channel.ps1 supervisor process alive for this bot? If so, it
+    # owns restart and auto-heal must NOT spawn a second one (would 409).
+    return [bool](Get-CimInstance Win32_Process -Filter "Name='pwsh.exe' OR Name='powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match "Watch-Channel\.ps1.*-Name\s+'?$([regex]::Escape($n))\b" })
+}
+
 function Get-BotHealth([object]$bot) {
     $stateDir = Join-Path $StateRoot $bot.name
     $token    = Get-Token $bot
@@ -184,16 +191,32 @@ switch ($Action) {
 
     'monitor' {
         $rows = @(); foreach ($b in $bots) { $rows += Get-BotHealth $b }
-        $oc = Get-OpenClawHealth; if ($oc) { $rows += $oc }
+
+        # Auto-heal: a bot is STOPPED and has NO supervisor (e.g. its tab was
+        # closed) -> relaunch its tab. Guard on Test-SupervisorRunning so we
+        # never double-start a bot that is merely mid-restart (would 409).
+        # Skip 'no token' stops (config error, not something a restart fixes).
+        $healed = @()
+        foreach ($b in $bots) {
+            $h = $rows | Where-Object { $_.Name -eq $b.name }
+            if ($h.Level -eq 'STOPPED' -and (Get-Token $b) -and -not (Test-SupervisorRunning $b.name)) {
+                try { Start-Process wt -ArgumentList ('-w 0 ' + (Get-TabFragment $b)); $healed += $b.name } catch {}
+            }
+        }
+
         $fleet = Join-Path $StateRoot 'fleet-status.json'
-        $payload = [ordered]@{ checkedAt = (Get-Date).ToString('o'); bots = $rows }
+        $payload = [ordered]@{ checkedAt = (Get-Date).ToString('o'); healed = $healed; bots = $rows }
         $payload | ConvertTo-Json -Depth 5 | Set-Content -Path $fleet -Encoding UTF8
+
         $bad = $rows | Where-Object { $_.Level -ne 'OK' -and $_.Name -notlike 'openclaw*' }
-        if ($bad) {
-            $summary = ($bad | ForEach-Object { "$($_.Name): $($_.Level) — $($_.Note)" }) -join "`n"
-            Show-Toast 'Telegram bots need attention' $summary
+        if ($bad -or $healed) {
+            $lines = @()
+            if ($healed) { $lines += "auto-restarted: $($healed -join ', ')" }
+            $lines += ($bad | ForEach-Object { "$($_.Name): $($_.Level) — $($_.Note)" })
+            $summary = $lines -join "`n"
+            Show-Toast 'Telegram bots: action taken' $summary
             $mlog = Join-Path $StateRoot 'monitor.log'
-            Add-Content -Path $mlog -Value ("{0:o}  PROBLEM`n{1}" -f (Get-Date), $summary) -Encoding UTF8
+            Add-Content -Path $mlog -Value ("{0:o}`n{1}" -f (Get-Date), $summary) -Encoding UTF8
         }
         Show-Health $rows
     }
