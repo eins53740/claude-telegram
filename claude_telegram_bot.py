@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 import subprocess
+import msvcrt
 from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 from telegram import Update
@@ -45,7 +46,24 @@ log = logging.getLogger(__name__)
 # ─── CONFIGURATION (from .env) ───────────────────────────────────
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ALLOWED_CHAT_ID = os.environ.get("ALLOWED_CHAT_ID")
-DEFAULT_CWD = os.environ.get("DEFAULT_CWD", r"C:\BD_Obsidian")
+
+
+
+def _default_cwd() -> str:
+    """Where a chat command runs when .env does not say.
+
+    The vault is C:\\BD_Obsidian on the laptop and D:\\BD_Obsidian on vmhost1. The fallback
+    here named the C: spelling, and this bot's scheduled task (ClaudeTelegramBot) runs on
+    VMHOST1 - where that path does not exist. Probe both and fall back to the user profile,
+    which always does, rather than handing the subprocess a directory that isn't there.
+    """
+    for root in (r"D:\BD_Obsidian", r"C:\BD_Obsidian"):
+        if os.path.isdir(root):
+            return root
+    return os.path.expanduser("~")
+
+
+DEFAULT_CWD = os.environ.get("DEFAULT_CWD") or _default_cwd()
 TIMEOUT_SECONDS = int(os.environ.get("TIMEOUT_SECONDS", "300"))
 
 if not BOT_TOKEN or not ALLOWED_CHAT_ID:
@@ -85,9 +103,11 @@ async def handle_message(update: Update, context) -> None:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=TIMEOUT_SECONDS,
             cwd=DEFAULT_CWD,
             env=env,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         log.info("DONE rc=%s  stdout=%d chars  stderr=%d chars",
                  result.returncode, len(result.stdout), len(result.stderr))
@@ -119,7 +139,20 @@ async def cmd_id(update: Update, context) -> None:
     await update.message.reply_text(f"Your chat ID: {update.effective_chat.id}")
 
 
+def acquire_lock():
+    """Ensure only one bot instance runs at a time using a lock file."""
+    lock_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".bot.lock")
+    lock_file = open(lock_path, "w")
+    try:
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+    except OSError:
+        sys.exit("ERROR: Another bot instance is already running. Exiting.")
+    return lock_file  # must keep reference alive to hold the lock
+
+
 def main() -> None:
+    lock = acquire_lock()  # noqa: F841 — reference kept to hold file lock
+
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("ping", cmd_ping))

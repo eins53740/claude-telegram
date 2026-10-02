@@ -1,0 +1,28 @@
+{
+  "_comment": "Central manifest for all claude --channels Telegram bots on this machine. Drives Start-AllChannels / Watch-Channel / Channels.ps1. OpenClaw is a SEPARATE runtime and is intentionally NOT listed here.",
+  "stateRoot": "${HOME}\\.claude\\channels",
+  "bots": [
+    {
+      "name": "uns-ot-expert",
+      "profileDir": "D:\\Github\\SECIL\\CodingAgentIgnition\\channels\\uns-ot-expert",
+      "repoRoot": "D:\\Github\\SECIL\\CodingAgentIgnition",
+      "model": "default",
+      "tabTitle": "tg:uns-ot-expert",
+      "_modelNote": "'default' forces Claude Code's built-in default model via --model default, overriding the broken saved default (anthropic/claude-opus-4-6) in settings.json. Empty would inherit that broken value."
+    },
+    {
+      "name": "bd-claude-vmhost1",
+      "profileDir": "D:\\Github\\BD\\Agents\\claude-telegram\\bd-claude-vmhost1",
+      "repoRoot": "D:\\Github\\BD",
+      "model": "claude-sonnet-4-6",
+      "tabTitle": "tg:bd-vmhost1"
+    },
+    {
+      "name": "generic-channel",
+      "profileDir": "D:\\Github\\BD\\Agents\\claude-telegram\\generic-channel",
+      "repoRoot": "D:\\Github\\BD\\Agents\\claude-telegram\\generic-channel",
+      "model": "claude-sonnet-4-6",
+      "tabTitle": "tg:bd-secil-claude"
+    }
+  ]
+}
