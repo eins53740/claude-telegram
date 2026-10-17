@@ -204,6 +204,30 @@ switch ($Action) {
             }
         }
 
+        # Auto-heal 2: supervisor + claude are alive but the telegram plugin never
+        # connected (MCP connect timeout is cached by Claude Code, so claude never
+        # retries on its own) -> bot.pid dead while the session idles. Restart the
+        # bot once the poller has been missing for $DeadGraceMin min. $RetryGapMin
+        # spaces restarts out (Start-Channel.ps1 clears Claude Code's shared MCP failure cache first).
+        $DeadGraceMin = 4; $RetryGapMin = 8
+        $stampFile = Join-Path $StateRoot 'monitor-restarts.json'
+        $stamps = if (Test-Path $stampFile) { Get-Content $stampFile -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
+        foreach ($b in $bots) {
+            $h = $rows | Where-Object { $_.Name -eq $b.name }
+            if ($h.Level -ne 'STOPPED' -or $h.Note -notmatch 'no live poller' -or -not (Test-SupervisorRunning $b.name)) { continue }
+            $statusFile = Join-Path $StateRoot "$($b.name)\status.json"
+            $sinceMin = if (Test-Path $statusFile) { ((Get-Date) - [datetime](Get-Content $statusFile -Raw | ConvertFrom-Json).updatedAt).TotalMinutes } else { 0 }
+            $lastMin  = if ($stamps.PSObject.Properties[$b.name]) { ((Get-Date) - [datetime]$stamps.($b.name)).TotalMinutes } else { [double]::MaxValue }
+            if ($sinceMin -ge $DeadGraceMin -and $lastMin -ge $RetryGapMin) {
+                & $PSCommandPath stop -Name $b.name | Out-Null
+                Start-Sleep 2
+                & $PSCommandPath start -Name $b.name | Out-Null
+                $stamps | Add-Member -NotePropertyName $b.name -NotePropertyValue (Get-Date).ToString('o') -Force
+                $healed += "$($b.name) (poller missing $([int]$sinceMin) min)"
+            }
+        }
+        if ($healed) { $stamps | ConvertTo-Json | Set-Content -Path $stampFile -Encoding UTF8 }
+
         $fleet = Join-Path $StateRoot 'fleet-status.json'
         $payload = [ordered]@{ checkedAt = (Get-Date).ToString('o'); healed = $healed; bots = $rows }
         $payload | ConvertTo-Json -Depth 5 | Set-Content -Path $fleet -Encoding UTF8
@@ -254,6 +278,10 @@ switch ($Action) {
             Get-CimInstance Win32_Process -Filter "Name='pwsh.exe' OR Name='powershell.exe'" |
                 Where-Object { $_.CommandLine -match "Watch-Channel.ps1.*-Name\s+'?$($b.name)\b" } |
                 ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host "stopped supervisor pid $($_.ProcessId) ($($b.name))" -ForegroundColor Yellow }
+            # killing the supervisor orphans its claude session; match it by the bot's own system prompt path
+            Get-CimInstance Win32_Process -Filter "Name='claude.exe'" |
+                Where-Object { $_.CommandLine -like "*$($b.profileDir)\SYSTEM_PROMPT.md*" } |
+                ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host "stopped claude session pid $($_.ProcessId) ($($b.name))" -ForegroundColor Yellow }
         }
     }
 

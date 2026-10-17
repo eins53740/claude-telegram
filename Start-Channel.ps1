@@ -59,6 +59,22 @@ if ([string]::IsNullOrWhiteSpace($StateName)) { $StateName = Split-Path $Profile
 $stateDir = Join-Path $HOME ".claude\channels\$StateName"
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 $env:TELEGRAM_STATE_DIR = $stateDir
+# The telegram plugin sometimes needs >30 s to start while the host is busy; Claude Code then
+# drops it for the whole session (no poller, bot silent). Give the MCP handshake 3 min.
+if (-not $env:MCP_TIMEOUT) { $env:MCP_TIMEOUT = '180000' }
+# Claude Code keeps ONE host-wide failure cache (~/.claude/mcp-needs-auth-cache.json). When any session's
+# telegram plugin connect times out, every session started in the next 15 min skips the plugin and its
+# bot never polls (and each failing retry renews the entry). Drop the entry before launching.
+try {
+    $authCache = Join-Path $HOME '.claude\mcp-needs-auth-cache.json'
+    if (Test-Path $authCache) {
+        $c = Get-Content $authCache -Raw | ConvertFrom-Json
+        if ($c.PSObject.Properties['plugin:telegram:telegram']) {
+            $c.PSObject.Properties.Remove('plugin:telegram:telegram')
+            $c | ConvertTo-Json -Compress | Set-Content $authCache -Encoding UTF8 -NoNewline
+        }
+    }
+} catch { Write-Host "could not clear MCP failure cache: $($_.Exception.Message)" -ForegroundColor DarkYellow }
 
 $envFile = Join-Path $ProfileDir '.env'
 $prompt  = Join-Path $ProfileDir 'SYSTEM_PROMPT.md'
