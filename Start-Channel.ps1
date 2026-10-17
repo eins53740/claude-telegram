@@ -114,7 +114,11 @@ Write-Host "  token     : $tokenLabel" -ForegroundColor DarkGray
 
 Push-Location $RepoRoot
 try {
-    $cliArgs = @('--channels', 'plugin:telegram@claude-plugins-official')
+    # The telegram plugin is disabled in the global settings (interactive sessions must not start a poller);
+    # each bot turns it on for itself through a settings file in its own state dir.
+    $botSettings = Join-Path $stateDir 'bot-settings.json'
+    '{"enabledPlugins":{"telegram@claude-plugins-official":true}}' | Set-Content -Path $botSettings -Encoding ASCII
+    $cliArgs = @('--channels', 'plugin:telegram@claude-plugins-official', '--settings', $botSettings)
     if ($Model)            { $cliArgs += @('--model', $Model) }
     if (Test-Path $prompt) { $cliArgs += @('--append-system-prompt', "@$prompt") }
     if ($McpDebug)         { $cliArgs += '--debug' }
